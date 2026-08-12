@@ -25,6 +25,8 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
   const [showToc, setShowToc] = useState(false);
   const [fontSize, setFontSize] = useState(135); // % por defecto (≈ 7 toques de A+)
   const [dark, setDark] = useState(false);       // modo claro por defecto
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,6 +39,14 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
       const nav = await epub.loaded.navigation;
       const items: TocItem[] = (nav.toc || []).map((t: any) => ({ label: t.label, href: t.href }));
       if (!cancelled) setToc(items);
+
+      // Generar ubicaciones (=páginas) para poder mostrar "página X de Y"
+      try {
+        await epub.locations.generate(1024);
+        if (!cancelled) setTotalPages(epub.locations.length() || 0);
+      } catch {
+        // Si falla (libro sin espaciado de ubicaciones), totalPages queda en 0
+      }
 
       if (hostRef.current) {
         const rendition = epub.renderTo(hostRef.current, {
@@ -53,12 +63,19 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
         rendition.themes.select('custom');
         applyTheme(dark);
 
-        // Guardar progreso al reubicar
+        // Guardar progreso + página actual al reubicar
         rendition.on('relocated', (location: any) => {
           if (location && location.start) {
             const loc = location.start;
             const pct = location.start.percentage || 0;
             onProgress(loc.cfi, toc.findIndex((t) => t.href === loc.href) >= 0 ? toc.findIndex((t) => t.href === loc.href) : 0, pct);
+            // Página actual (ubicación por CFI). locationFromCfi devuelve el índice (0-based)
+            try {
+              const idx = epub.locations.locationFromCfi(loc.cfi);
+              if (typeof idx === 'number' && idx >= 0) setCurrentPage(idx + 1);
+            } catch {
+              // ignore
+            }
           }
         });
 
@@ -191,6 +208,9 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
       {/* Barra inferior: navegación */}
       <div className="flex items-center justify-between px-3 py-2 border-t border-theme shrink-0">
         <button onClick={prev} className="px-4 py-2 rounded-lg bg-surface hover:bg-surface-hover text-sm font-medium">‹ Anterior</button>
+        <span className="text-xs text-muted">
+          {totalPages > 0 ? `Página ${Math.max(1, currentPage)} de ${totalPages}` : ''}
+        </span>
         <button onClick={next} className="px-4 py-2 rounded-lg bg-[#22C55E] text-white text-sm font-semibold hover:bg-[#16A34A]">Siguiente ›</button>
       </div>
     </div>
