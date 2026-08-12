@@ -23,8 +23,8 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
 
   const [toc, setToc] = useState<TocItem[]>([]);
   const [showToc, setShowToc] = useState(false);
-  const [fontSize, setFontSize] = useState(100); // %
-  const [dark, setDark] = useState(true);
+  const [fontSize, setFontSize] = useState(135); // % por defecto (≈ 7 toques de A+)
+  const [dark, setDark] = useState(false);       // modo claro por defecto
 
   useEffect(() => {
     let cancelled = false;
