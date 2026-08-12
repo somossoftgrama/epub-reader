@@ -19,6 +19,7 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const epubRef = useRef<EpubBook | null>(null);
   const renditionRef = useRef<any>(null);
+  const touchX = useRef<number | null>(null);
 
   const [toc, setToc] = useState<TocItem[]>([]);
   const [showToc, setShowToc] = useState(false);
@@ -50,7 +51,7 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
           body: { 'font-size': `${fontSize}%` },
         });
         rendition.themes.select('custom');
-        if (dark) rendition.themes.override('background', '#0A0A0A');
+        applyTheme(dark);
 
         // Guardar progreso al reubicar
         rendition.on('relocated', (location: any) => {
@@ -95,13 +96,31 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
     renditionRef.current?.next();
   }
 
+  // Swipe para pasar página (izquierda = siguiente, derecha = anterior)
+  function handleTouchStart(e: React.TouchEvent) {
+    touchX.current = e.touches[0].clientX;
+  }
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (touchX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchX.current;
+    touchX.current = null;
+    const threshold = 60;
+    if (dx < -threshold) next();
+    else if (dx > threshold) prev();
+  }
+
   function toggleTheme() {
-    const rendition = renditionRef.current;
-    if (!rendition) return;
     const nextDark = !dark;
     setDark(nextDark);
-    if (nextDark) rendition.themes.override('background', '#0A0A0A');
-    else rendition.themes.override('background', '#ffffff');
+    applyTheme(nextDark);
+  }
+
+  // Aplica fondo + color de texto del tema al contenido del EPUB
+  function applyTheme(isDark: boolean) {
+    const rendition = renditionRef.current;
+    if (!rendition || !rendition.themes) return;
+    rendition.themes.override('background', isDark ? '#0A0A0A' : '#ffffff');
+    rendition.themes.override('color', isDark ? '#E5E7EB' : '#1A1A1A');
   }
 
   function changeFont(delta: number) {
@@ -133,23 +152,39 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
 
       {/* Índice */}
       {showToc && (
-        <div className="absolute inset-y-0 left-0 w-72 max-w-[80%] bg-surface border-r border-theme z-20 overflow-y-auto">
-          <div className="p-3 text-sm font-semibold text-muted uppercase tracking-wider border-b border-theme">Índice</div>
-          <ul>
-            {toc.length === 0 && <li className="p-3 text-sm text-muted">Sin índice disponible</li>}
-            {toc.map((t) => (
-              <li key={t.href}>
-                <button onClick={() => goTo(t.href)} className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover">
-                  {t.label}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <>
+          <div className="fixed inset-0 z-10 bg-black/50" onClick={() => setShowToc(false)} />
+          <div className="absolute inset-y-0 left-0 w-72 max-w-[80%] bg-surface border-r border-theme z-20 overflow-y-auto">
+            <div className="sticky top-0 flex items-center justify-between p-3 border-b border-theme bg-surface">
+              <span className="text-sm font-semibold text-muted uppercase tracking-wider">Índice</span>
+              <button
+                onClick={() => setShowToc(false)}
+                className="text-2xl leading-none text-muted hover:text-theme"
+                aria-label="Cerrar índice"
+              >
+                ×
+              </button>
+            </div>
+            <ul>
+              {toc.length === 0 && <li className="p-3 text-sm text-muted">Sin índice disponible</li>}
+              {toc.map((t) => (
+                <li key={t.href}>
+                  <button onClick={() => goTo(t.href)} className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover">
+                    {t.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </>
       )}
 
       {/* Área del libro */}
-      <div className="flex-1 relative">
+      <div
+        className="flex-1 relative"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <div ref={hostRef} className="absolute inset-0" />
       </div>
 
