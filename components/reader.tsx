@@ -40,14 +40,6 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
       const items: TocItem[] = (nav.toc || []).map((t: any) => ({ label: t.label, href: t.href }));
       if (!cancelled) setToc(items);
 
-      // Generar ubicaciones (=páginas) para poder mostrar "página X de Y"
-      try {
-        await epub.locations.generate(1024);
-        if (!cancelled) setTotalPages(epub.locations.length() || 0);
-      } catch {
-        // Si falla (libro sin espaciado de ubicaciones), totalPages queda en 0
-      }
-
       if (hostRef.current) {
         const rendition = epub.renderTo(hostRef.current, {
           width: '100%',
@@ -69,21 +61,41 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
             const loc = location.start;
             const pct = location.start.percentage || 0;
             onProgress(loc.cfi, toc.findIndex((t) => t.href === loc.href) >= 0 ? toc.findIndex((t) => t.href === loc.href) : 0, pct);
-            // Página actual (ubicación por CFI). locationFromCfi devuelve el índice (0-based)
-            try {
-              const idx = epub.locations.locationFromCfi(loc.cfi);
-              if (typeof idx === 'number' && idx >= 0) setCurrentPage(idx + 1);
-            } catch {
-              // ignore
+            // Página actual solo si las ubicaciones ya están listas
+            if (totalPages > 0 && epub.locations) {
+              try {
+                const idx = epub.locations.locationFromCfi(loc.cfi);
+                if (typeof idx === 'number' && idx >= 0) setCurrentPage(idx + 1);
+              } catch {
+                // ignore
+              }
             }
           }
         });
 
+        // Mostrar el libro PRIMERO (no bloquear la lectura)
         if (initialLocation) {
           await rendition.display(initialLocation);
         } else {
           await rendition.display();
         }
+
+        // Después, en segundo plano, generar ubicaciones (=páginas)
+        if (!cancelled) {
+          generateLocations(epub);
+        }
+      }
+    }
+
+    // Genera el conteo de páginas sin bloquear la lectura
+    async function generateLocations(epub: EpubBook) {
+      try {
+        await epub.locations.generate(1024);
+        if (cancelled) return;
+        const n = epub.locations.length() || 0;
+        setTotalPages(n);
+      } catch {
+        // Si falla, totalPages queda en 0 (sin contador)
       }
     }
 
