@@ -20,6 +20,7 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
   const epubRef = useRef<EpubBook | null>(null);
   const renditionRef = useRef<any>(null);
   const touchX = useRef<number | null>(null);
+  const pagesReadyRef = useRef(false);
 
   const [toc, setToc] = useState<TocItem[]>([]);
   const [showToc, setShowToc] = useState(false);
@@ -30,6 +31,9 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    pagesReadyRef.current = false;
+    setTotalPages(0);
+    setCurrentPage(0);
 
     async function init() {
       const buf = await book.file.arrayBuffer();
@@ -61,8 +65,8 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
             const loc = location.start;
             const pct = location.start.percentage || 0;
             onProgress(loc.cfi, toc.findIndex((t) => t.href === loc.href) >= 0 ? toc.findIndex((t) => t.href === loc.href) : 0, pct);
-            // Página actual solo si las ubicaciones ya están listas
-            if (totalPages > 0 && epub.locations) {
+            // Página actual si las ubicaciones ya están listas (usando ref, no closure)
+            if (pagesReadyRef.current && epub.locations) {
               try {
                 const idx = epub.locations.locationFromCfi(loc.cfi);
                 if (typeof idx === 'number' && idx >= 0) setCurrentPage(idx + 1);
@@ -93,7 +97,9 @@ export function Reader({ book, initialLocation, onProgress }: Props) {
         await epub.locations.generate(1024);
         if (cancelled) return;
         const n = epub.locations.length() || 0;
+        pagesReadyRef.current = true;
         setTotalPages(n);
+        setCurrentPage(1); // arranca en la página 1 cuando el conteo está listo
       } catch {
         // Si falla, totalPages queda en 0 (sin contador)
       }
